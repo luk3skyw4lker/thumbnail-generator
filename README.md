@@ -6,10 +6,9 @@ To generate a thumbnail, just call the /thumbnail.png endpoint with title (the t
 
 ## Params
 
-**title** (obligatory): A string containing the title
-**bg** (optional): A hex code containing the background color (default is #121214)
-
-<!-- **logos** (optional): The tech logos svg link -->
+- **title** (obligatory): A string containing the title
+- **bg** (optional): A hex code containing the background color (default is #121214)
+- **logos** (optional): The tech logos svg link
 
 ## TODOs
 

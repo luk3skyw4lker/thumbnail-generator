@@ -22,7 +22,7 @@ export default async function (req: NextApiRequest, res: NextApiResponse) {
 		const fontSize = Number(req.query.fontSize || 5);
 
 		if (!title) {
-			throw new Error('Missing title');
+			return res.status(400).json({ err: 'Missing title' });
 		}
 
 		const html = getThumbnailTemplate({

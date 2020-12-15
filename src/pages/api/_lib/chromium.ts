@@ -22,7 +22,7 @@ export async function getScreenshot(
 ): Promise<Buffer> {
 	const page = await getPage(isDev);
 
-	await page.setViewport({ width: 1200, height: 630 });
+	await page.setViewport({ width: 1920, height: 1097 });
 	await page.setContent(html);
 
 	const file = await page.screenshot({ type: 'png' });

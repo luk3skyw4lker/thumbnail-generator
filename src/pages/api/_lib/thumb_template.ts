@@ -1,4 +1,5 @@
 import { sanitizeHtml } from './sanitizer';
+import marked from 'marked';
 
 interface GetThumbnailTemplateArgs {
 	thumbnail_bg: string;
@@ -35,29 +36,18 @@ export default function getThumbnailTemplate({
     
     <title>Thumbnail</title>
   
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   
     <style>
       body {
-        margin: 0;
-        font-family: Roboto, sans-serif;
-        color: #FFF;
         background: ${thumbnail_bg};
-        background-image: 
-          radial-gradient(circle at 25px 25px, rgba(255, 255, 255, 0.2) 2%, transparent 0%), 
-          radial-gradient(circle at 75px 75px, rgba(255, 255, 255, 0.2) 2%, transparent 0%);
+        background-image: radial-gradient(circle at 25px 25px, lightgray 2%, transparent 0%), radial-gradient(circle at 75px 75px, lightgray 2%, transparent 0%);
         background-size: 100px 100px;
         height: 100vh;
-      }
-  
-      #wrapper {
-        width: 100%;
-        height: 100%;
         display: flex;
-        flex-direction: column;
+        text-align: center;
         align-items: center;
         justify-content: center;
-        text-align: center;
       }
   
       svg {
@@ -87,17 +77,25 @@ export default function getThumbnailTemplate({
       }
 
       .logo {
-          margin: 0 75px;
+        margin: 0 75px;
       }
 
-      .title {
-        font-family: Verdana;
-        font-size: ${fontSize}rem;
+      .spacer {
+        margin: 150px
+      }
+
+      .heading {
+        font-style: normal;
+        font-family: 'Inter', sans-serif;
+        font-size: ${fontSize}px;
+        color: #fff;
+        line-height: 1.8;
       }
     </style>
   </head>
   <body>
-    <div id="wrapper">
+    <div>
+      <div class="spacer">
       <div class="logo-wrapper">
          ${
 						images.length === 0
@@ -105,8 +103,10 @@ export default function getThumbnailTemplate({
 							: images.map((img, i) => getPlusSign(i) + getImage(img))
 					}
       </div>
-
-      <p class="title">${title}</p>
+      <div class="spacer">
+      <div class="heading">
+        ${marked(title)}
+      </div>
     </div>
   </body>
   </html>`;

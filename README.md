@@ -16,4 +16,4 @@ This would be an example URL for generating a thumb:
 
 ## TODOs
 
-- Add logo support
+- [x] Add logo support

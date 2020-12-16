@@ -16,10 +16,10 @@ const getArray = (stringOrArray: string[] | string | undefined): string[] => {
 
 export default async function (req: NextApiRequest, res: NextApiResponse) {
 	try {
-		const title = String(req.query.title);
-		const thumbnail_bg = String(req.query.bg || '#121214');
+		const thumbnail_bg = String(req.query.bg || '#000000');
+		const fontSize = Number(req.query.fontSize || 100);
 		const images = getArray(req.query.images);
-		const fontSize = Number(req.query.fontSize || 5);
+		const title = String(req.query.title);
 
 		if (!title) {
 			return res.status(400).json({ err: 'Missing title' });

@@ -70,6 +70,22 @@ async function renderThumbnail(parsed: {
 	return getScreenshot(html);
 }
 
+async function renderThumbnailReliable(parsed: {
+	title: string;
+	bg: string;
+	images: string[];
+	fontSize: number;
+	logoHeight: number;
+	logoWidth: number | 'auto';
+}) {
+	try {
+		return await renderThumbnail(parsed);
+	} catch (error) {
+		console.error('Render failed, attempting one more time:', error);
+		return renderThumbnail(parsed);
+	}
+}
+
 export async function GET(request: Request) {
 	try {
 		const { searchParams } = new URL(request.url);
@@ -84,7 +100,7 @@ export async function GET(request: Request) {
 
 		if (bypass) {
 			deleteCachedThumbnail(cacheKey);
-			const buffer = await renderThumbnail(parsed);
+			const buffer = await renderThumbnailReliable(parsed);
 			setCachedThumbnail(cacheKey, buffer);
 
 			return new Response(new Uint8Array(buffer), {
@@ -96,7 +112,7 @@ export async function GET(request: Request) {
 		}
 
 		const { buffer, cacheStatus } = await getOrCreateThumbnail(cacheKey, () =>
-			renderThumbnail(parsed)
+			renderThumbnailReliable(parsed)
 		);
 
 		return new Response(new Uint8Array(buffer), {

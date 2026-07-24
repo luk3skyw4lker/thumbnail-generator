@@ -14,19 +14,62 @@ const VIEWPORT = { width: 1200, height: 630 };
 let browser: Browser | null = null;
 let page: Page | null = null;
 
-/** One render at a time on the shared page (same model as the original app). */
-let renderLock: Promise<unknown> = Promise.resolve();
+/** Only one Chromium extract/launch at a time (concurrent cold starts corrupt /tmp). */
+let browserLaunch: Promise<Browser> | null = null;
+
+/** Serialize screenshots so a shared page never races. */
+let renderChain: Promise<unknown> = Promise.resolve();
+
+async function closeQuietly(target: { close: () => Promise<void> } | null) {
+	if (!target) return;
+	try {
+		await target.close();
+	} catch {
+		// ignore
+	}
+}
+
+async function resetPage() {
+	await closeQuietly(page && !page.isClosed() ? page : null);
+	page = null;
+}
 
 async function resetBrowser() {
-	page = null;
-	if (browser) {
-		try {
-			await browser.close();
-		} catch {
-			// ignore
+	await resetPage();
+	await closeQuietly(browser);
+	browser = null;
+	browserLaunch = null;
+}
+
+async function launchBrowser(): Promise<Browser> {
+	if (isDev) {
+		const executablePath = chromeExecPaths[process.platform];
+		if (!executablePath) {
+			throw new Error(`Unsupported platform for local Chrome: ${process.platform}`);
 		}
-		browser = null;
+
+		return puppeteer.launch({
+			args: [
+				'--no-sandbox',
+				'--disable-setuid-sandbox',
+				'--disable-dev-shm-usage',
+				'--disable-gpu'
+			],
+			executablePath,
+			headless: true,
+			defaultViewport: VIEWPORT
+		});
 	}
+
+	// Avoid WebGL/swiftshader extract cost and memory pressure under load
+	chromium.setGraphicsMode = false;
+
+	return puppeteer.launch({
+		args: [...chromium.args, '--disable-gpu', '--disable-dev-shm-usage'],
+		defaultViewport: VIEWPORT,
+		executablePath: await chromium.executablePath(),
+		headless: true
+	});
 }
 
 async function getBrowser(): Promise<Browser> {
@@ -34,29 +77,25 @@ async function getBrowser(): Promise<Browser> {
 		return browser;
 	}
 
-	await resetBrowser();
-
-	if (isDev) {
-		const executablePath = chromeExecPaths[process.platform];
-		if (!executablePath) {
-			throw new Error(`Unsupported platform for local Chrome: ${process.platform}`);
-		}
-
-		browser = await puppeteer.launch({
-			args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-			executablePath,
-			headless: true
-		});
-	} else {
-		browser = await puppeteer.launch({
-			args: chromium.args,
-			defaultViewport: VIEWPORT,
-			executablePath: await chromium.executablePath(),
-			headless: true
-		});
+	if (!browserLaunch) {
+		browserLaunch = launchBrowser()
+			.then((launched) => {
+				browser = launched;
+				browser.on('disconnected', () => {
+					browser = null;
+					page = null;
+					browserLaunch = null;
+				});
+				return launched;
+			})
+			.catch((error) => {
+				browserLaunch = null;
+				browser = null;
+				throw error;
+			});
 	}
 
-	return browser;
+	return browserLaunch;
 }
 
 async function getPage(): Promise<Page> {
@@ -67,16 +106,20 @@ async function getPage(): Promise<Page> {
 	}
 
 	page = await activeBrowser.newPage();
+	page.setDefaultNavigationTimeout(20_000);
+	page.setDefaultTimeout(20_000);
 	await page.setViewport(VIEWPORT);
 	return page;
 }
 
-async function takeScreenshot(html: string): Promise<Buffer> {
+async function takeScreenshotOnce(html: string): Promise<Buffer> {
 	const activePage = await getPage();
 
-	// Match the original path: set content, then screenshot.
-	// A short image wait avoids blank logos without multi-second stalls.
-	await activePage.setContent(html, { waitUntil: 'load' });
+	await activePage.setContent(html, {
+		waitUntil: 'domcontentloaded',
+		timeout: 20_000
+	});
+
 	await activePage.evaluate(async () => {
 		const images = Array.from(document.images);
 		await Promise.race([
@@ -89,23 +132,42 @@ async function takeScreenshot(html: string): Promise<Buffer> {
 					});
 				})
 			),
-			new Promise<void>((resolve) => setTimeout(resolve, 1500))
+			new Promise<void>((resolve) => setTimeout(resolve, 2000))
 		]);
 	});
 
-	const file = await activePage.screenshot({ type: 'png' });
+	const file = await activePage.screenshot({ type: 'png', captureBeyondViewport: false });
 	return Buffer.from(file);
 }
 
-export function getScreenshot(html: string): Promise<Buffer> {
-	const run = () =>
-		takeScreenshot(html).catch(async (error) => {
-			await resetBrowser();
-			throw error;
-		});
+async function takeScreenshot(html: string): Promise<Buffer> {
+	try {
+		return await takeScreenshotOnce(html);
+	} catch (firstError) {
+		console.error('Screenshot failed, retrying with fresh page:', firstError);
+		// Drop the page first — keep the browser if it's still alive
+		await resetPage();
 
-	const result = renderLock.then(run, run);
-	renderLock = result.then(
+		if (!browser?.connected) {
+			await resetBrowser();
+		}
+
+		try {
+			return await takeScreenshotOnce(html);
+		} catch (secondError) {
+			console.error('Screenshot retry failed, resetting browser:', secondError);
+			await resetBrowser();
+			throw secondError;
+		}
+	}
+}
+
+export function getScreenshot(html: string): Promise<Buffer> {
+	const run = () => takeScreenshot(html);
+
+	// Always continue the chain so one failure doesn't poison later jobs
+	const result = renderChain.then(run, run);
+	renderChain = result.then(
 		() => undefined,
 		() => undefined
 	);

@@ -10,11 +10,9 @@ const chromeExecPaths: Record<string, string> = {
 };
 
 const VIEWPORT = { width: 1200, height: 630 };
+const IMAGE_WAIT_MS = 4000;
 
 let browser: Browser | null = null;
-
-/** Serialize renders — a shared page races under concurrent requests. */
-let renderQueue: Promise<unknown> = Promise.resolve();
 
 async function resetBrowser() {
 	if (browser) {
@@ -57,16 +55,22 @@ async function getBrowser(): Promise<Browser> {
 	return browser;
 }
 
-async function takeScreenshot(html: string): Promise<Buffer> {
+export async function getScreenshot(html: string): Promise<Buffer> {
 	const activeBrowser = await getBrowser();
 	const page: Page = await activeBrowser.newPage();
 
 	try {
 		await page.setViewport(VIEWPORT);
-		await page.setContent(html, { waitUntil: 'load' });
-		await page.evaluate(async () => {
+		await page.setContent(html, { waitUntil: 'domcontentloaded' });
+
+		await page.evaluate(async (waitMs) => {
+			const deadline = Date.now() + waitMs;
+
 			if (document.fonts?.ready) {
-				await document.fonts.ready;
+				await Promise.race([
+					document.fonts.ready,
+					new Promise<void>((resolve) => setTimeout(resolve, 1500))
+				]);
 			}
 
 			const images = Array.from(document.images);
@@ -74,15 +78,24 @@ async function takeScreenshot(html: string): Promise<Buffer> {
 				images.map((img) => {
 					if (img.complete) return Promise.resolve();
 					return new Promise<void>((resolve) => {
-						img.addEventListener('load', () => resolve(), { once: true });
-						img.addEventListener('error', () => resolve(), { once: true });
+						const remaining = Math.max(250, deadline - Date.now());
+						const timer = setTimeout(() => resolve(), remaining);
+						const done = () => {
+							clearTimeout(timer);
+							resolve();
+						};
+						img.addEventListener('load', done, { once: true });
+						img.addEventListener('error', done, { once: true });
 					});
 				})
 			);
-		});
+		}, IMAGE_WAIT_MS);
 
 		const file = await page.screenshot({ type: 'png' });
 		return Buffer.from(file);
+	} catch (error) {
+		await resetBrowser();
+		throw error;
 	} finally {
 		try {
 			if (!page.isClosed()) await page.close();
@@ -90,20 +103,4 @@ async function takeScreenshot(html: string): Promise<Buffer> {
 			// ignore
 		}
 	}
-}
-
-export function getScreenshot(html: string): Promise<Buffer> {
-	const run = () =>
-		takeScreenshot(html).catch(async (error) => {
-			await resetBrowser();
-			throw error;
-		});
-
-	const result = renderQueue.then(run, run);
-	renderQueue = result.then(
-		() => undefined,
-		() => undefined
-	);
-
-	return result;
 }

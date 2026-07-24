@@ -15,14 +15,17 @@ const getImage = (
 	logoHeight: number,
 	logoWidth: number | 'auto'
 ) => {
-	const resolvedWidth = logoWidth === 'auto' ? logoHeight : logoWidth;
+	const widthAttr = logoWidth === 'auto' ? 'auto' : String(logoWidth);
+	const widthStyle =
+		logoWidth === 'auto' ? 'auto' : `${logoWidth}px`;
 
 	return `<img
       class="logo"
       alt=""
       src="${escapeAttribute(image)}"
-      width="${resolvedWidth}"
+      width="${widthAttr}"
       height="${logoHeight}"
+      style="height: ${logoHeight}px; width: ${widthStyle}; max-width: 480px;"
     />`;
 };
 
@@ -39,14 +42,12 @@ export function getThumbnailTemplate({
 	logoWidth
 }: ThumbnailTemplateArgs) {
 	const renderedTitle = marked.parse(title, { async: false }) as string;
-	const resolvedWidth = logoWidth === 'auto' ? logoHeight : logoWidth;
 
 	return `<!DOCTYPE html>
   <html lang="en">
   <head>
     <meta charset="UTF-8">
     <title>Thumbnail</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
       * { box-sizing: border-box; }
 
@@ -88,8 +89,6 @@ export function getThumbnailTemplate({
 
       .logo {
         display: block;
-        width: ${resolvedWidth}px !important;
-        height: ${logoHeight}px !important;
         object-fit: contain;
         flex-shrink: 0;
       }
@@ -102,7 +101,7 @@ export function getThumbnailTemplate({
       }
 
       .heading {
-        font-family: 'Inter', sans-serif;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
         font-size: ${fontSize}px;
         font-weight: 700;
         color: #fff;

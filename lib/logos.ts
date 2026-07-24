@@ -1,6 +1,6 @@
 /**
- * SVGs often ship with width/height="1em" and padded viewBoxes (especially
- * icon sets). Rewrite dimensions, zoom the viewBox, and embed as a data URI.
+ * SVGs that ship with width/height="1em" render tiny as <img>.
+ * Only rewrite those dimensions — never crop the viewBox (that clips logos).
  */
 export async function normalizeLogoUrl(
 	url: string,
@@ -9,7 +9,7 @@ export async function normalizeLogoUrl(
 ): Promise<string> {
 	try {
 		const response = await fetch(url, {
-			signal: AbortSignal.timeout(8000),
+			signal: AbortSignal.timeout(5000),
 			cache: 'no-store'
 		});
 
@@ -27,35 +27,24 @@ export async function normalizeLogoUrl(
 			return url;
 		}
 
+		const needsSizeFix = /(?:width|height)\s*=\s*["'][^"']*em["']/i.test(body);
+		if (!needsSizeFix) {
+			// Already has real dimensions — leave the file alone to avoid clipping
+			return url;
+		}
+
 		let svg = body;
 
 		if (/\swidth\s*=/.test(svg)) {
-			svg = svg.replace(/\swidth\s*=\s*"[^"]*"/i, ` width="${width}"`);
+			svg = svg.replace(/\swidth\s*=\s*["'][^"']*["']/i, ` width="${width}"`);
 		} else {
 			svg = svg.replace(/<svg\b/i, `<svg width="${width}"`);
 		}
 
 		if (/\sheight\s*=/.test(svg)) {
-			svg = svg.replace(/\sheight\s*=\s*"[^"]*"/i, ` height="${height}"`);
+			svg = svg.replace(/\sheight\s*=\s*["'][^"']*["']/i, ` height="${height}"`);
 		} else {
 			svg = svg.replace(/<svg\b/i, `<svg height="${height}"`);
-		}
-
-		const viewBoxMatch = svg.match(/viewBox\s*=\s*"([^"]+)"/i);
-		if (viewBoxMatch) {
-			const parts = viewBoxMatch[1].trim().split(/[\s,]+/).map(Number);
-			if (parts.length === 4 && parts.every((n) => Number.isFinite(n))) {
-				const [minX, minY, vw, vh] = parts;
-				const inset = 0.04;
-				const nx = minX + vw * inset;
-				const ny = minY + vh * inset;
-				const nw = vw * (1 - 2 * inset);
-				const nh = vh * (1 - 2 * inset);
-				svg = svg.replace(
-					/viewBox\s*=\s*"[^"]*"/i,
-					`viewBox="${nx} ${ny} ${nw} ${nh}"`
-				);
-			}
 		}
 
 		return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;

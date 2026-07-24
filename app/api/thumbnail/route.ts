@@ -5,7 +5,7 @@ import { parseThumbnailParams, thumbnailCacheKey } from '@/lib/params';
 import { getThumbnailTemplate } from '@/lib/thumb-template';
 
 export const runtime = 'nodejs';
-export const maxDuration = 30;
+export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';

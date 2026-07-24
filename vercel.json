@@ -2,8 +2,7 @@
 	"functions": {
 		"app/api/thumbnail/route.ts": {
 			"memory": 1024,
-			"maxDuration": 60,
-			"maxConcurrency": 1
+			"maxDuration": 60
 		}
 	}
 }

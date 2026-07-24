@@ -10,14 +10,19 @@ export interface ThumbnailTemplateArgs {
 	logoWidth: number | 'auto';
 }
 
+marked.setOptions({
+	async: false,
+	gfm: true,
+	breaks: false
+});
+
 const getImage = (
 	image: string,
 	logoHeight: number,
 	logoWidth: number | 'auto'
 ) => {
 	const widthAttr = logoWidth === 'auto' ? 'auto' : String(logoWidth);
-	const widthStyle =
-		logoWidth === 'auto' ? 'auto' : `${logoWidth}px`;
+	const widthStyle = logoWidth === 'auto' ? 'auto' : `${logoWidth}px`;
 
 	return `<img
       class="logo"
@@ -103,7 +108,7 @@ export function getThumbnailTemplate({
       .heading {
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
         font-size: ${fontSize}px;
-        font-weight: 700;
+        font-weight: 400;
         color: #fff;
         line-height: 1.35;
         letter-spacing: -0.02em;
@@ -115,8 +120,18 @@ export function getThumbnailTemplate({
         padding: 0;
       }
 
-      .heading strong {
+      .heading p {
+        display: block;
+      }
+
+      .heading strong,
+      .heading b {
         font-weight: 800;
+      }
+
+      .heading em,
+      .heading i {
+        font-style: italic;
       }
     </style>
   </head>

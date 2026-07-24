@@ -13,14 +13,12 @@ const VIEWPORT = { width: 1200, height: 630 };
 
 let browser: Browser | null = null;
 let page: Page | null = null;
-
-/** Only one Chromium extract/launch at a time (concurrent cold starts corrupt /tmp). */
 let browserLaunch: Promise<Browser> | null = null;
 
-/** Serialize screenshots so a shared page never races. */
+/** Fluid packs concurrent requests onto one instance — never race Chromium. */
 let renderChain: Promise<unknown> = Promise.resolve();
 
-async function closeQuietly(target: { close: () => Promise<void> } | null) {
+async function closeQuietly(target: { close: () => Promise<void> } | null | undefined) {
 	if (!target) return;
 	try {
 		await target.close();
@@ -49,23 +47,17 @@ async function launchBrowser(): Promise<Browser> {
 		}
 
 		return puppeteer.launch({
-			args: [
-				'--no-sandbox',
-				'--disable-setuid-sandbox',
-				'--disable-dev-shm-usage',
-				'--disable-gpu'
-			],
+			args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
 			executablePath,
 			headless: true,
 			defaultViewport: VIEWPORT
 		});
 	}
 
-	// Avoid WebGL/swiftshader extract cost and memory pressure under load
 	chromium.setGraphicsMode = false;
 
 	return puppeteer.launch({
-		args: [...chromium.args, '--disable-gpu', '--disable-dev-shm-usage'],
+		args: [...chromium.args, '--disable-dev-shm-usage'],
 		defaultViewport: VIEWPORT,
 		executablePath: await chromium.executablePath(),
 		headless: true
@@ -81,7 +73,7 @@ async function getBrowser(): Promise<Browser> {
 		browserLaunch = launchBrowser()
 			.then((launched) => {
 				browser = launched;
-				browser.on('disconnected', () => {
+				launched.on('disconnected', () => {
 					browser = null;
 					page = null;
 					browserLaunch = null;
@@ -106,46 +98,22 @@ async function getPage(): Promise<Page> {
 	}
 
 	page = await activeBrowser.newPage();
-	page.setDefaultNavigationTimeout(20_000);
-	page.setDefaultTimeout(20_000);
 	await page.setViewport(VIEWPORT);
 	return page;
 }
 
 async function takeScreenshotOnce(html: string): Promise<Buffer> {
 	const activePage = await getPage();
-
-	await activePage.setContent(html, {
-		waitUntil: 'domcontentloaded',
-		timeout: 20_000
-	});
-
-	await activePage.evaluate(async () => {
-		const images = Array.from(document.images);
-		await Promise.race([
-			Promise.all(
-				images.map((img) => {
-					if (img.complete) return Promise.resolve();
-					return new Promise<void>((resolve) => {
-						img.addEventListener('load', () => resolve(), { once: true });
-						img.addEventListener('error', () => resolve(), { once: true });
-					});
-				})
-			),
-			new Promise<void>((resolve) => setTimeout(resolve, 2000))
-		]);
-	});
-
-	const file = await activePage.screenshot({ type: 'png', captureBeyondViewport: false });
+	await activePage.setContent(html);
+	const file = await activePage.screenshot({ type: 'png' });
 	return Buffer.from(file);
 }
 
 async function takeScreenshot(html: string): Promise<Buffer> {
 	try {
 		return await takeScreenshotOnce(html);
-	} catch (firstError) {
-		console.error('Screenshot failed, retrying with fresh page:', firstError);
-		// Drop the page first — keep the browser if it's still alive
+	} catch (error) {
+		console.error('Screenshot failed, retrying with fresh page:', error);
 		await resetPage();
 
 		if (!browser?.connected) {
@@ -154,19 +122,17 @@ async function takeScreenshot(html: string): Promise<Buffer> {
 
 		try {
 			return await takeScreenshotOnce(html);
-		} catch (secondError) {
-			console.error('Screenshot retry failed, resetting browser:', secondError);
+		} catch (retryError) {
 			await resetBrowser();
-			throw secondError;
+			throw retryError;
 		}
 	}
 }
 
 export function getScreenshot(html: string): Promise<Buffer> {
 	const run = () => takeScreenshot(html);
-
-	// Always continue the chain so one failure doesn't poison later jobs
 	const result = renderChain.then(run, run);
+	// Keep the queue alive even when a job fails
 	renderChain = result.then(
 		() => undefined,
 		() => undefined

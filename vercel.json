@@ -1,7 +1,8 @@
 {
+	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"fluid": true,
 	"functions": {
 		"app/api/thumbnail/route.ts": {
-			"memory": 1024,
 			"maxDuration": 60
 		}
 	}

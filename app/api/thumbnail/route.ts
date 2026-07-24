@@ -18,7 +18,7 @@ function shouldBypassCache(request: Request) {
 	return host === 'localhost' || host === '127.0.0.1';
 }
 
-function cacheHeaders(bypass: boolean) {
+function cacheHeaders(bypass: boolean): Record<string, string> {
 	if (bypass) {
 		return {
 			'Content-Type': 'image/png',

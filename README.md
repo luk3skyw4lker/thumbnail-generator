@@ -1,19 +1,58 @@
 # Thumbnail Generator
 
-This is a project based on the Rocketseat Tutorial on Serverless Thumbnail Generation with Next.js. Here is the [link](https://www.youtube.com/watch?v=qvetoR6V5ic).
+Serverless PNG thumbnail / OG image generator. Pass a title (and optional logos) as query params and get a cached PNG back.
 
-To generate a thumbnail, just call the /thumbnail.png endpoint with title (the thumbnail title) and bg (the background color param) query params and use that URL to your img tags.
+## Endpoint
 
-## Params
+```
+GET /api/thumbnail.png
+```
 
-- **title** (obligatory): A string containing the title
-- **bg** (optional): A hex code containing the background color (default is #121214)
-- **images** (optional): The tech logos svg link
+(` /api/thumbnail` works too.)
 
-This would be an example URL for generating a thumb:
+### Query parameters
 
-    https://thumbnail-generator.vercel.app/api/thumbnail.png?title=Hoisting%20in%20Javascript&images=https%3A%2F%2Fcdn.worldvectorlogo.com%2Flogos%2Flogo-javascript.svg
+| Param | Required | Default | Description |
+| --- | --- | --- | --- |
+| `title` | yes | — | Thumbnail heading. Supports markdown. |
+| `bg` | no | `#000000` | Background color hex. |
+| `images` | no | `[]` | Logo URL(s). Repeat the param or comma-separate. |
+| `fontSize` | no | `64` | Heading size in px (clamped 16–800). |
+| `logoHeight` | no | `144` | Logo height in px (clamped 16–800). |
+| `logoWidth` | no | `auto` | Logo width in px, or `auto` for aspect ratio. |
 
-## TODOs
+### Example
 
-- [x] Add logo support
+```
+https://thumbnail-generator.vercel.app/api/thumbnail.png?title=Hoisting%20in%20**Javascript**&images=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fcommons%2F6%2F6a%2FJavaScript-logo.png&logoHeight=160
+```
+
+```html
+<img
+  src="https://thumbnail-generator.vercel.app/api/thumbnail.png?title=Hello%20World&images=https://example.com/logo.svg&logoHeight=180"
+  alt="Hello World"
+  width="1200"
+  height="630"
+/>
+```
+
+## Caching
+
+- **localhost / `next dev`:** always bypasses cache (`X-Cache: BYPASS`). Browsers may still show an old PNG if it was cached earlier with long-lived headers — hard-refresh or append `&_=1` (ignored by the API) to bust it.
+- **Production:** CDN `Cache-Control` with `s-maxage=31536000` (1 year). Change query params to get a new image.
+- Warm production instances also keep an in-memory LRU of recently generated PNGs.
+
+First request for a unique param set still runs Chromium; repeats should be fast from CDN.
+
+## Local development
+
+```bash
+yarn
+yarn dev
+```
+
+Requires Google Chrome installed locally (used by Puppeteer in development).
+
+## Deploy
+
+Built for Vercel. Production uses `@sparticuz/chromium` + `puppeteer-core` on the Node.js runtime.

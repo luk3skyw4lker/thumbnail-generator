@@ -1,5 +1,8 @@
 {
-	"rewrites": [
-		{ "source": "/api/thumbnail.png", "destination": "/api/thumbnail" }
-	]
+	"functions": {
+		"app/api/thumbnail/route.ts": {
+			"memory": 1024,
+			"maxDuration": 30
+		}
+	}
 }

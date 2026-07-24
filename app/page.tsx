@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import styles from './page.module.css';
 
 const EXAMPLE_PATH =
@@ -12,6 +12,30 @@ const IMG_SNIPPET = `<img
   width="2048"
   height="1170"
 />`;
+
+function CopyableExample({ value }: { value: string }) {
+	const [copied, setCopied] = useState(false);
+
+	async function copy() {
+		await navigator.clipboard.writeText(value);
+		setCopied(true);
+		window.setTimeout(() => setCopied(false), 1600);
+	}
+
+	return (
+		<div className={styles.exampleWrap}>
+			<pre className={styles.example}>{value}</pre>
+			<button
+				type="button"
+				className={styles.copyBtn}
+				onClick={copy}
+				aria-label={copied ? 'Copied' : 'Copy to clipboard'}
+			>
+				{copied ? 'Copied' : 'Copy'}
+			</button>
+		</div>
+	);
+}
 
 export default function HomePage() {
 	const [copied, setCopied] = useState(false);
@@ -42,6 +66,15 @@ export default function HomePage() {
 		window.setTimeout(() => setCopied(false), 1600);
 	}
 
+	function scrollToDocs(event: MouseEvent<HTMLAnchorElement>) {
+		event.preventDefault();
+		const docs = document.getElementById('docs');
+		if (!docs) return;
+
+		docs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		window.history.replaceState(null, '', '#docs');
+	}
+
 	return (
 		<main className={styles.page}>
 			<div className={styles.atmosphere} aria-hidden />
@@ -56,7 +89,11 @@ export default function HomePage() {
 					<button type="button" className={styles.cta} onClick={copyExample}>
 						{copied ? 'Copied example URL' : 'Copy example URL'}
 					</button>
-					<a className={styles.ctaSecondary} href="#docs">
+					<a
+						className={styles.ctaSecondary}
+						href="#docs"
+						onClick={scrollToDocs}
+					>
 						Read the API
 					</a>
 				</div>
@@ -183,10 +220,10 @@ export default function HomePage() {
 				</table>
 
 				<p className={styles.sectionLabel}>Example URL</p>
-				<pre className={styles.example}>{exampleUrl}</pre>
+				<CopyableExample value={exampleUrl} />
 
 				<p className={styles.sectionLabel}>Example usage</p>
-				<pre className={styles.example}>{IMG_SNIPPET}</pre>
+				<CopyableExample value={IMG_SNIPPET} />
 
 				<h2 id="caching" className={styles.subheading}>
 					Caching

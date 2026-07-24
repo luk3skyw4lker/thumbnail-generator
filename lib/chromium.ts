@@ -1,7 +1,18 @@
 import chromium from '@sparticuz/chromium';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 
-const isDev = process.env.NODE_ENV === 'development';
+/**
+ * Original: `const isDev = !process.env.AWS_REGION`
+ * Do NOT gate on NODE_ENV — `next start` is production locally and must
+ * still use system Chrome (sparticuz binary is Linux-only → ENOEXEC on macOS).
+ */
+const isDev =
+	!process.env.AWS_REGION &&
+	!process.env.VERCEL &&
+	!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+/** Match the original Rocketseat viewport. */
+const VIEWPORT = { width: 2048, height: 1170 };
 
 const chromeExecPaths: Record<string, string> = {
 	win32: 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
@@ -9,55 +20,23 @@ const chromeExecPaths: Record<string, string> = {
 	darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 };
 
-const VIEWPORT = { width: 1200, height: 630 };
-
 let browser: Browser | null = null;
-let page: Page | null = null;
-let browserLaunch: Promise<Browser> | null = null;
-let renderChain: Promise<unknown> = Promise.resolve();
 
-async function closeQuietly(target: { close: () => Promise<void> } | null | undefined) {
-	if (!target) return;
-	try {
-		await target.close();
-	} catch {
-		// ignore
-	}
-}
-
-async function resetPage() {
-	await closeQuietly(page && !page.isClosed() ? page : null);
-	page = null;
-}
+/**
+ * Fluid Compute runs concurrent invocations in one process.
+ * Old shared `_page` races under that — serialize + fresh page per request.
+ */
+let renderLock: Promise<void> = Promise.resolve();
 
 async function resetBrowser() {
-	await resetPage();
-	await closeQuietly(browser);
-	browser = null;
-	browserLaunch = null;
-}
-
-async function launchBrowser(): Promise<Browser> {
-	if (isDev) {
-		const executablePath = chromeExecPaths[process.platform];
-		if (!executablePath) {
-			throw new Error(`Unsupported platform for local Chrome: ${process.platform}`);
+	if (browser) {
+		try {
+			await browser.close();
+		} catch {
+			// ignore
 		}
-
-		return puppeteer.launch({
-			args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-			executablePath,
-			headless: true,
-			defaultViewport: VIEWPORT
-		});
+		browser = null;
 	}
-
-	return puppeteer.launch({
-		args: chromium.args,
-		defaultViewport: VIEWPORT,
-		executablePath: await chromium.executablePath(),
-		headless: true
-	});
 }
 
 async function getBrowser(): Promise<Browser> {
@@ -65,66 +44,72 @@ async function getBrowser(): Promise<Browser> {
 		return browser;
 	}
 
-	if (!browserLaunch) {
-		browserLaunch = launchBrowser()
-			.then((launched) => {
-				browser = launched;
-				launched.on('disconnected', () => {
-					browser = null;
-					page = null;
-					browserLaunch = null;
-				});
-				return launched;
-			})
-			.catch((error) => {
-				browserLaunch = null;
-				browser = null;
-				throw error;
-			});
+	await resetBrowser();
+
+	if (isDev) {
+		const executablePath = chromeExecPaths[process.platform];
+		if (!executablePath) {
+			throw new Error(`No Chrome path for platform ${process.platform}`);
+		}
+
+		browser = await puppeteer.launch({
+			args: [],
+			executablePath,
+			headless: true,
+			defaultViewport: VIEWPORT
+		});
+
+		return browser;
 	}
 
-	return browserLaunch;
-}
+	// Same shape as old chrome-aws-lambda options, swapped to @sparticuz/chromium
+	chromium.setGraphicsMode = false;
 
-async function getPage(): Promise<Page> {
-	const activeBrowser = await getBrowser();
+	browser = await puppeteer.launch({
+		args: chromium.args,
+		defaultViewport: VIEWPORT,
+		executablePath: await chromium.executablePath(),
+		// Newer @sparticuz/chromium no longer exports `.headless`
+		headless: 'shell'
+	});
 
-	if (page && !page.isClosed()) {
-		return page;
-	}
-
-	page = await activeBrowser.newPage();
-	await page.setViewport(VIEWPORT);
-	return page;
-}
-
-async function takeScreenshotOnce(html: string): Promise<Buffer> {
-	const activePage = await getPage();
-	await activePage.setContent(html);
-	const file = await activePage.screenshot({ type: 'png' });
-	return Buffer.from(file);
+	return browser;
 }
 
 async function takeScreenshot(html: string): Promise<Buffer> {
+	const activeBrowser = await getBrowser();
+	// Fresh page per request (old reused one page — unsafe under Fluid)
+	const page: Page = await activeBrowser.newPage();
+
 	try {
-		return await takeScreenshotOnce(html);
-	} catch (error) {
-		console.error('Screenshot failed, retrying:', error);
-		await resetPage();
-		if (!browser?.connected) {
-			await resetBrowser();
+		await page.setViewport(VIEWPORT);
+		await page.setContent(html);
+		const file = await page.screenshot({ type: 'png' });
+		return Buffer.from(file);
+	} finally {
+		try {
+			if (!page.isClosed()) await page.close();
+		} catch {
+			// ignore
 		}
-		return takeScreenshotOnce(html);
 	}
 }
 
-/** One screenshot at a time on the shared page (Fluid-safe). */
-export function getScreenshot(html: string): Promise<Buffer> {
-	const run = () => takeScreenshot(html);
-	const result = renderChain.then(run, run);
-	renderChain = result.then(
-		() => undefined,
-		() => undefined
-	);
-	return result;
+export async function getScreenshot(html: string): Promise<Buffer> {
+	let release!: () => void;
+	const previous = renderLock;
+	renderLock = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+
+	await previous;
+
+	try {
+		return await takeScreenshot(html);
+	} catch (error) {
+		await resetBrowser();
+		throw error;
+	} finally {
+		release();
+	}
 }

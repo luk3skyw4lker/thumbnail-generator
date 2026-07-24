@@ -9,8 +9,8 @@ const EXAMPLE_PATH =
 const IMG_SNIPPET = `<img
   src="https://your-domain.com/api/thumbnail.png?title=Hello%20World&images=https://example.com/logo.svg&logoHeight=180"
   alt="Hello World"
-  width="1200"
-  height="630"
+  width="2048"
+  height="1170"
 />`;
 
 export default function HomePage() {
@@ -76,8 +76,8 @@ export default function HomePage() {
 					<img
 						src={previewSrc}
 						alt="Example generated thumbnail for Hoisting in Javascript"
-						width={1200}
-						height={630}
+						width={2048}
+						height={1170}
 					/>
 				</div>
 
@@ -130,7 +130,7 @@ export default function HomePage() {
 							</td>
 							<td data-label="Required">no</td>
 							<td data-label="Default">
-								<code>64</code>
+								<code>100</code>
 							</td>
 							<td data-label="Description">Heading font size in px (16–800).</td>
 						</tr>
@@ -140,7 +140,7 @@ export default function HomePage() {
 							</td>
 							<td data-label="Required">no</td>
 							<td data-label="Default">
-								<code>144</code>
+								<code>225</code>
 							</td>
 							<td data-label="Description">Logo height in px (16–800).</td>
 						</tr>

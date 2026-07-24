@@ -16,9 +16,8 @@ export interface ThumbnailParams {
 
 const SIZE_MIN = 16;
 const SIZE_MAX = 800;
-// Old: font 100 / logo 225 on 2048×1170. Keep font at 64; preserve logo:font ratio.
-const DEFAULT_LOGO_HEIGHT = 144;
-const DEFAULT_FONT_SIZE = 64;
+const DEFAULT_LOGO_HEIGHT = 225;
+const DEFAULT_FONT_SIZE = 100;
 const DEFAULT_BG = '#000000';
 
 function clamp(value: number, min: number, max: number) {

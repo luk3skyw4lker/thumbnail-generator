@@ -1,13 +1,3 @@
-/** Escape only what is needed inside an HTML attribute URL. */
-export function escapeAttribute(value: string) {
-	return String(value)
-		.replace(/&/g, '&amp;')
-		.replace(/"/g, '&quot;')
-		.replace(/'/g, '&#39;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;');
-}
-
 const entityMap: Record<string, string> = {
 	'&': '&amp;',
 	'<': '&lt;',
@@ -17,7 +7,17 @@ const entityMap: Record<string, string> = {
 	'/': '&#x2F;'
 };
 
-/** Full HTML-text sanitizer (for untrusted text nodes, not URLs). */
+/** Same sanitizer as the original project (used for logo URLs in HTML). */
 export function sanitizeHtml(html: string) {
 	return String(html).replace(/[&<>"'/]/g, (key) => entityMap[key]);
+}
+
+/** Escape only what HTML attributes need (for non-URL text). */
+export function escapeAttribute(value: string) {
+	return String(value)
+		.replace(/&/g, '&amp;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
 }

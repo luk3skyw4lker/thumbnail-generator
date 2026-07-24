@@ -9,6 +9,11 @@ export function clearThumbnailCache() {
 	inflight.clear();
 }
 
+export function deleteCachedThumbnail(key: string) {
+	cache.delete(key);
+	inflight.delete(key);
+}
+
 export function getCachedThumbnail(key: string): Buffer | undefined {
 	const hit = cache.get(key);
 	if (!hit) return undefined;

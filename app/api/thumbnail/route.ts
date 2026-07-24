@@ -1,5 +1,9 @@
 import { getScreenshot } from '@/lib/chromium';
-import { clearThumbnailCache, getOrCreateThumbnail } from '@/lib/cache';
+import {
+	deleteCachedThumbnail,
+	getOrCreateThumbnail,
+	setCachedThumbnail
+} from '@/lib/cache';
 import { normalizeLogoUrls } from '@/lib/logos';
 import { parseThumbnailParams, thumbnailCacheKey } from '@/lib/params';
 import { getThumbnailTemplate } from '@/lib/thumb-template';
@@ -10,7 +14,8 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
-function shouldBypassCache(request: Request) {
+function shouldBypassCache(request: Request, nocache: boolean) {
+	if (nocache) return true;
 	if (process.env.THUMBNAIL_NO_CACHE === '1') return true;
 	if (process.env.NODE_ENV === 'development') return true;
 
@@ -75,11 +80,14 @@ export async function GET(request: Request) {
 			return Response.json({ err: parsed.error }, { status: 400 });
 		}
 
-		const bypass = shouldBypassCache(request);
+		const bypass = shouldBypassCache(request, parsed.nocache);
+		const cacheKey = thumbnailCacheKey(parsed);
 
 		if (bypass) {
-			clearThumbnailCache();
+			deleteCachedThumbnail(cacheKey);
 			const buffer = await renderThumbnail(parsed);
+			setCachedThumbnail(cacheKey, buffer);
+
 			return new Response(new Uint8Array(buffer), {
 				headers: {
 					...cacheHeaders(true),
@@ -88,7 +96,6 @@ export async function GET(request: Request) {
 			});
 		}
 
-		const cacheKey = thumbnailCacheKey(parsed);
 		const { buffer, cacheStatus } = await getOrCreateThumbnail(cacheKey, () =>
 			renderThumbnail(parsed)
 		);

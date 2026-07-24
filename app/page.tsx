@@ -144,6 +144,18 @@ export default function HomePage() {
 								Logo width in px, or <code>auto</code> to keep aspect ratio.
 							</td>
 						</tr>
+						<tr>
+							<td data-label="Param">
+								<code>nocache</code>
+							</td>
+							<td data-label="Required">no</td>
+							<td data-label="Default">—</td>
+							<td data-label="Description">
+								Set to <code>1</code> to force a fresh render and skip
+								browser/CDN caching. Aliases: <code>refresh=1</code>,{' '}
+								<code>_=&lt;token&gt;</code>.
+							</td>
+						</tr>
 					</tbody>
 				</table>
 

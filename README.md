@@ -8,7 +8,7 @@ Serverless PNG thumbnail / OG image generator. Pass a title (and optional logos)
 GET /api/thumbnail.png
 ```
 
-(` /api/thumbnail` works too.)
+(`/api/thumbnail` works too.)
 
 ### Query parameters
 
@@ -20,11 +20,18 @@ GET /api/thumbnail.png
 | `fontSize` | no | `64` | Heading size in px (clamped 16–800). |
 | `logoHeight` | no | `144` | Logo height in px (clamped 16–800). |
 | `logoWidth` | no | `auto` | Logo width in px, or `auto` for aspect ratio. |
+| `nocache` | no | — | Set to `1` / `true` to force a fresh render. Aliases: `refresh=1`, `_=<token>`. |
 
 ### Example
 
 ```
 https://thumbnail-generator.vercel.app/api/thumbnail.png?title=Hoisting%20in%20**Javascript**&images=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fcommons%2F6%2F6a%2FJavaScript-logo.png&logoHeight=160
+```
+
+Force a fresh render while testing:
+
+```
+https://thumbnail-generator.vercel.app/api/thumbnail.png?title=Hello&nocache=1
 ```
 
 ```html
@@ -38,11 +45,10 @@ https://thumbnail-generator.vercel.app/api/thumbnail.png?title=Hoisting%20in%20*
 
 ## Caching
 
-- **localhost / `next dev`:** always bypasses cache (`X-Cache: BYPASS`). Browsers may still show an old PNG if it was cached earlier with long-lived headers — hard-refresh or append `&_=1` (ignored by the API) to bust it.
-- **Production:** CDN `Cache-Control` with `s-maxage=31536000` (1 year). Change query params to get a new image.
+- **`nocache=1` (best for testing):** regenerates the image, skips the in-memory cache, and returns `Cache-Control: no-store`. Changing the query string also avoids stale browser/CDN entries from earlier `immutable` responses.
+- **localhost / `next dev`:** bypasses cache by default.
+- **Production (without nocache):** CDN caches for 1 year. Change image params (title, logos, sizes, etc.) or use `nocache` for a new image.
 - Warm production instances also keep an in-memory LRU of recently generated PNGs.
-
-First request for a unique param set still runs Chromium; repeats should be fast from CDN.
 
 ## Local development
 

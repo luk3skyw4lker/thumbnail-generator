@@ -5,6 +5,8 @@ export interface ThumbnailParams {
 	fontSize: number;
 	logoHeight: number;
 	logoWidth: number | 'auto';
+	/** Skip caches for this request (testing / forced refresh). */
+	nocache: boolean;
 }
 
 const SIZE_MIN = 16;
@@ -45,6 +47,24 @@ function parsePositiveInt(
 	return Math.round(parsed);
 }
 
+function isTruthyFlag(value: string | null): boolean {
+	if (value == null) return false;
+	const normalized = value.trim().toLowerCase();
+	return (
+		normalized === '1' ||
+		normalized === 'true' ||
+		normalized === 'yes'
+	);
+}
+
+/** `nocache=1`, `refresh=1`, or `_=<token>` forces a fresh render. */
+export function wantsNoCache(searchParams: URLSearchParams): boolean {
+	if (isTruthyFlag(searchParams.get('nocache'))) return true;
+	if (isTruthyFlag(searchParams.get('refresh'))) return true;
+	const bust = searchParams.get('_');
+	return bust != null && bust !== '';
+}
+
 export function parseThumbnailParams(
 	searchParams: URLSearchParams
 ): ThumbnailParams | { error: string } {
@@ -83,7 +103,8 @@ export function parseThumbnailParams(
 			SIZE_MIN,
 			SIZE_MAX
 		),
-		logoWidth
+		logoWidth,
+		nocache: wantsNoCache(searchParams)
 	};
 }
 
@@ -97,5 +118,6 @@ export function thumbnailCacheKey(params: ThumbnailParams): string {
 		fontSize: params.fontSize,
 		logoHeight: params.logoHeight,
 		logoWidth: params.logoWidth
+		// nocache omitted — does not change the image, only caching behavior
 	});
 }

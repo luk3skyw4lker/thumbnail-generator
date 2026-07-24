@@ -3,7 +3,7 @@
 	"fluid": true,
 	"functions": {
 		"app/api/thumbnail/route.ts": {
-			"maxDuration": 60
+			"maxDuration": 300
 		}
 	}
 }

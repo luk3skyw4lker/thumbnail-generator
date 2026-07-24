@@ -11,12 +11,16 @@ const chromeExecPaths: Record<string, string> = {
 
 const VIEWPORT = { width: 1200, height: 630 };
 
-let browser: Browser | null = null;
-let page: Page | null = null;
-let browserLaunch: Promise<Browser> | null = null;
+/**
+ * Fluid packs many requests on one 2GB instance.
+ * 2 parallel pages drains the burst ~2x faster without the crashes of unbounded concurrency.
+ */
+const MAX_PARALLEL = 2;
 
-/** Fluid packs concurrent requests onto one instance — never race Chromium. */
-let renderChain: Promise<unknown> = Promise.resolve();
+let browser: Browser | null = null;
+let browserLaunch: Promise<Browser> | null = null;
+let active = 0;
+const waiters: Array<() => void> = [];
 
 async function closeQuietly(target: { close: () => Promise<void> } | null | undefined) {
 	if (!target) return;
@@ -27,13 +31,7 @@ async function closeQuietly(target: { close: () => Promise<void> } | null | unde
 	}
 }
 
-async function resetPage() {
-	await closeQuietly(page && !page.isClosed() ? page : null);
-	page = null;
-}
-
 async function resetBrowser() {
-	await resetPage();
 	await closeQuietly(browser);
 	browser = null;
 	browserLaunch = null;
@@ -75,7 +73,6 @@ async function getBrowser(): Promise<Browser> {
 				browser = launched;
 				launched.on('disconnected', () => {
 					browser = null;
-					page = null;
 					browserLaunch = null;
 				});
 				return launched;
@@ -90,52 +87,73 @@ async function getBrowser(): Promise<Browser> {
 	return browserLaunch;
 }
 
-async function getPage(): Promise<Page> {
-	const activeBrowser = await getBrowser();
-
-	if (page && !page.isClosed()) {
-		return page;
+async function acquireSlot(): Promise<void> {
+	if (active < MAX_PARALLEL) {
+		active += 1;
+		return;
 	}
 
-	page = await activeBrowser.newPage();
-	await page.setViewport(VIEWPORT);
-	return page;
+	await new Promise<void>((resolve) => {
+		waiters.push(() => {
+			active += 1;
+			resolve();
+		});
+	});
+}
+
+function releaseSlot() {
+	active = Math.max(0, active - 1);
+	const next = waiters.shift();
+	if (next) next();
 }
 
 async function takeScreenshotOnce(html: string): Promise<Buffer> {
-	const activePage = await getPage();
-	await activePage.setContent(html);
-	const file = await activePage.screenshot({ type: 'png' });
-	return Buffer.from(file);
+	const activeBrowser = await getBrowser();
+	const page: Page = await activeBrowser.newPage();
+
+	try {
+		await page.setViewport(VIEWPORT);
+		// Faster than full `load` — logos get a short grace period below
+		await page.setContent(html, { waitUntil: 'domcontentloaded' });
+		await page.evaluate(async () => {
+			const images = Array.from(document.images);
+			await Promise.race([
+				Promise.all(
+					images.map((img) => {
+						if (img.complete) return Promise.resolve();
+						return new Promise<void>((resolve) => {
+							img.addEventListener('load', () => resolve(), { once: true });
+							img.addEventListener('error', () => resolve(), { once: true });
+						});
+					})
+				),
+				new Promise<void>((resolve) => setTimeout(resolve, 1500))
+			]);
+		});
+		const file = await page.screenshot({ type: 'png' });
+		return Buffer.from(file);
+	} finally {
+		await closeQuietly(page);
+	}
 }
 
 async function takeScreenshot(html: string): Promise<Buffer> {
 	try {
 		return await takeScreenshotOnce(html);
 	} catch (error) {
-		console.error('Screenshot failed, retrying with fresh page:', error);
-		await resetPage();
-
+		console.error('Screenshot failed, retrying:', error);
 		if (!browser?.connected) {
 			await resetBrowser();
 		}
-
-		try {
-			return await takeScreenshotOnce(html);
-		} catch (retryError) {
-			await resetBrowser();
-			throw retryError;
-		}
+		return takeScreenshotOnce(html);
 	}
 }
 
-export function getScreenshot(html: string): Promise<Buffer> {
-	const run = () => takeScreenshot(html);
-	const result = renderChain.then(run, run);
-	// Keep the queue alive even when a job fails
-	renderChain = result.then(
-		() => undefined,
-		() => undefined
-	);
-	return result;
+export async function getScreenshot(html: string): Promise<Buffer> {
+	await acquireSlot();
+	try {
+		return await takeScreenshot(html);
+	} finally {
+		releaseSlot();
+	}
 }

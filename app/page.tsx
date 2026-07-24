@@ -17,12 +17,22 @@ export default function HomePage() {
 	const [copied, setCopied] = useState(false);
 	const [exampleUrl, setExampleUrl] = useState(EXAMPLE_PATH);
 	const [previewSrc, setPreviewSrc] = useState(EXAMPLE_PATH);
+	const [cacheVersion, setCacheVersion] = useState('…');
+	const [versionUrl, setVersionUrl] = useState('/api/cache-version');
 
 	useEffect(() => {
 		const origin = window.location.origin;
 		setExampleUrl(`${origin}${EXAMPLE_PATH}`);
+		setVersionUrl(`${origin}/api/cache-version`);
 		// Bust browser disk cache from earlier immutable responses
 		setPreviewSrc(`${EXAMPLE_PATH}&_=${Date.now()}`);
+
+		fetch('/api/cache-version')
+			.then((res) => res.json())
+			.then((data: { version?: string }) => {
+				if (data.version) setCacheVersion(data.version);
+			})
+			.catch(() => setCacheVersion('unknown'));
 	}, []);
 
 	async function copyExample() {
@@ -57,6 +67,8 @@ export default function HomePage() {
 				<p>
 					Hit the endpoint with query params. Responses are CDN-cached for a
 					year; identical params reuse an in-memory cache on warm instances.
+					See <a href="#caching">Caching</a> for deploy busting with{' '}
+					<code>v</code>.
 				</p>
 
 				<div className={styles.preview}>
@@ -156,6 +168,17 @@ export default function HomePage() {
 								<code>_=&lt;token&gt;</code>.
 							</td>
 						</tr>
+						<tr>
+							<td data-label="Param">
+								<code>v</code>
+							</td>
+							<td data-label="Required">no</td>
+							<td data-label="Default">—</td>
+							<td data-label="Description">
+								Cache-bust token (does not change pixels). Use the value from{' '}
+								<code>/api/cache-version</code> after generator deploys.
+							</td>
+						</tr>
 					</tbody>
 				</table>
 
@@ -164,6 +187,58 @@ export default function HomePage() {
 
 				<p className={styles.sectionLabel}>Example usage</p>
 				<pre className={styles.example}>{IMG_SNIPPET}</pre>
+
+				<h2 id="caching" className={styles.subheading}>
+					Caching
+				</h2>
+				<p>
+					There are two layers. In-memory cache on the server clears on every
+					deploy. CDN and browser cache are keyed by URL — same URL stays
+					cached until you change it or use <code>nocache</code>.
+				</p>
+
+				<table className={styles.params}>
+					<thead>
+						<tr>
+							<th>Layer</th>
+							<th>Invalidated on deploy?</th>
+							<th>How</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td data-label="Layer">In-memory (server)</td>
+							<td data-label="Invalidated on deploy?">Yes</td>
+							<td data-label="How">
+								New instances + deploy SHA in the cache key
+							</td>
+						</tr>
+						<tr>
+							<td data-label="Layer">CDN / browser</td>
+							<td data-label="Invalidated on deploy?">No</td>
+							<td data-label="How">
+								Change the URL (e.g. <code>&amp;v=…</code>) or use{' '}
+								<code>nocache=1</code>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+
+				<p className={styles.sectionLabel}>
+					Bust CDN after a generator deploy
+				</p>
+				<p>
+					Current cache version:{' '}
+					<code className={styles.versionBadge}>{cacheVersion}</code>
+				</p>
+				<pre className={styles.example}>{`GET ${versionUrl}
+→ { "version": "${cacheVersion}" }`}</pre>
+				<p>
+					At blog build time (or runtime), read that version and append it to
+					thumbnail URLs. When this service redeploys, <code>version</code>{' '}
+					changes → new URLs → CDN miss → fresh thumbs.
+				</p>
+				<pre className={styles.example}>{`/api/thumbnail.png?title=Hello%20World&v=${cacheVersion}`}</pre>
 			</section>
 		</main>
 	);

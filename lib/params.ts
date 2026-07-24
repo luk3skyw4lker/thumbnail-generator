@@ -7,6 +7,11 @@ export interface ThumbnailParams {
 	logoWidth: number | 'auto';
 	/** Skip caches for this request (testing / forced refresh). */
 	nocache: boolean;
+	/**
+	 * Optional CDN bust token (e.g. deploy SHA). Does not change pixels —
+	 * only differentiates the URL / memory key for caching.
+	 */
+	v: string | null;
 }
 
 const SIZE_MIN = 16;
@@ -104,20 +109,27 @@ export function parseThumbnailParams(
 			SIZE_MAX
 		),
 		logoWidth,
-		nocache: wantsNoCache(searchParams)
+		nocache: wantsNoCache(searchParams),
+		v: searchParams.get('v')
 	};
 }
 
 /** Stable cache key so param order / formatting does not fragment the cache. */
-export function thumbnailCacheKey(params: ThumbnailParams): string {
+export function thumbnailCacheKey(
+	params: ThumbnailParams,
+	deployVersion: string
+): string {
 	return JSON.stringify({
+		deployVersion,
 		title: params.title,
 		bg: params.bg.toLowerCase(),
 		// Preserve order — logo sequence is part of the image
 		images: params.images,
 		fontSize: params.fontSize,
 		logoHeight: params.logoHeight,
-		logoWidth: params.logoWidth
+		logoWidth: params.logoWidth,
+		// Client-provided bust token (CDN URL differs when this changes)
+		v: params.v
 		// nocache omitted — does not change the image, only caching behavior
 	});
 }

@@ -21,6 +21,7 @@ GET /api/thumbnail.png
 | `logoHeight` | no | `144` | Logo height in px (clamped 16–800). |
 | `logoWidth` | no | `auto` | Logo width in px, or `auto` for aspect ratio. |
 | `nocache` | no | — | Set to `1` / `true` to force a fresh render. Aliases: `refresh=1`, `_=<token>`. |
+| `v` | no | — | Cache-bust token (does not change pixels). Use the value from `/api/cache-version` after generator deploys. |
 
 ### Example
 
@@ -45,10 +46,32 @@ https://thumbnail-generator.vercel.app/api/thumbnail.png?title=Hello&nocache=1
 
 ## Caching
 
-- **`nocache=1` (best for testing):** regenerates the image, skips the in-memory cache, and returns `Cache-Control: no-store`. Changing the query string also avoids stale browser/CDN entries from earlier `immutable` responses.
+There are two layers:
+
+| Layer | Invalidated on our deploy? | How |
+| --- | --- | --- |
+| In-memory (server) | Yes, automatically | New instances + deploy SHA in the cache key |
+| CDN / browser | **No** (same URL = same cache) | Change the URL (e.g. `&v=…`) or use `nocache=1` |
+
+### Bust CDN after a generator deploy (recommended for the blog)
+
+```
+GET /api/cache-version  →  { "version": "abc1234deadbf" }
+```
+
+At **blog build time** (or runtime), read that version and append it:
+
+```
+/api/thumbnail.png?title=...&v=abc1234deadbf
+```
+
+When this service redeploys, `version` changes → new URLs → CDN miss → fresh thumbs. The `v` param does not affect the image pixels.
+
+### Other knobs
+
+- **`nocache=1`:** always regenerates; sends `Cache-Control: no-store` (good for local testing).
 - **localhost / `next dev`:** bypasses cache by default.
-- **Production (without nocache):** CDN caches for 1 year. Change image params (title, logos, sizes, etc.) or use `nocache` for a new image.
-- Warm production instances also keep an in-memory LRU of recently generated PNGs.
+- **Production (no `v` / `nocache`):** CDN caches for 1 year on the exact URL.
 
 ## Local development
 

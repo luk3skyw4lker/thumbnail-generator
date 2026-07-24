@@ -4,6 +4,7 @@ import {
 	getOrCreateThumbnail,
 	setCachedThumbnail
 } from '@/lib/cache';
+import { CACHE_VERSION } from '@/lib/cache-version';
 import { prepareLogoUrls } from '@/lib/logos';
 import { parseThumbnailParams, thumbnailCacheKey } from '@/lib/params';
 import { getThumbnailTemplate } from '@/lib/thumb-template';
@@ -32,14 +33,16 @@ function cacheHeaders(bypass: boolean): Record<string, string> {
 			Pragma: 'no-cache',
 			Expires: '0',
 			'CDN-Cache-Control': 'no-store',
-			'Vercel-CDN-Cache-Control': 'no-store'
+			'Vercel-CDN-Cache-Control': 'no-store',
+			'X-Cache-Version': CACHE_VERSION
 		};
 	}
 
 	return {
 		'Content-Type': 'image/png',
 		'Cache-Control':
-			'public, immutable, no-transform, s-maxage=31536000, max-age=31536000, stale-while-revalidate=86400'
+			'public, immutable, no-transform, s-maxage=31536000, max-age=31536000, stale-while-revalidate=86400',
+		'X-Cache-Version': CACHE_VERSION
 	};
 }
 
@@ -77,7 +80,7 @@ export async function GET(request: Request) {
 		}
 
 		const bypass = shouldBypassCache(request, parsed.nocache);
-		const cacheKey = thumbnailCacheKey(parsed);
+		const cacheKey = thumbnailCacheKey(parsed, CACHE_VERSION);
 
 		if (bypass) {
 			deleteCachedThumbnail(cacheKey);

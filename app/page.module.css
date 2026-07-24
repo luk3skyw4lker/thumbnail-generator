@@ -133,11 +133,23 @@
 	margin: 0 0 0.75rem;
 }
 
+.subheading {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: clamp(1.6rem, 3vw, 2.25rem);
+	letter-spacing: -0.03em;
+	margin: 3rem 0 0.75rem;
+}
+
 .docs > p {
 	color: var(--mist);
-	max-width: 48ch;
-	margin: 0 0 2.5rem;
+	max-width: 52ch;
+	margin: 0 0 1.5rem;
 	line-height: 1.6;
+}
+
+.versionBadge {
+	color: var(--amber);
+	font-size: 0.95em;
 }
 
 .preview {

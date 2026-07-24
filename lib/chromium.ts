@@ -1,4 +1,11 @@
-import chromium from '@sparticuz/chromium';
+import { existsSync } from 'node:fs';
+import { unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import chromium, {
+	inflate,
+	setupLambdaEnvironment
+} from '@sparticuz/chromium';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 
 /**
@@ -27,6 +34,65 @@ let browser: Browser | null = null;
  * Old shared `_page` races under that — serialize + fresh page per request.
  */
 let renderLock: Promise<void> = Promise.resolve();
+
+/**
+ * Fluid Compute does not set AWS Lambda env vars. Without them (or an
+ * equivalent), @sparticuz/chromium skips extracting al2023.tar.br →
+ * `/tmp/chromium: error while loading shared libraries: libnspr4.so`.
+ *
+ * Set the runtime hint + LD_LIBRARY_PATH, and force-extract AL2023 libs.
+ */
+async function resolveChromiumExecutable(): Promise<string> {
+	process.env.AWS_LAMBDA_JS_RUNTIME ??= 'nodejs22.x';
+
+	const libDir = join(tmpdir(), 'al2023', 'lib');
+	setupLambdaEnvironment(libDir);
+
+	chromium.setGraphicsMode = false;
+
+	const chromiumPath = join(tmpdir(), 'chromium');
+	const libnspr = join(libDir, 'libnspr4.so');
+
+	// Stale binary from a previous extract that skipped AL2023 libs
+	if (existsSync(chromiumPath) && !existsSync(libnspr)) {
+		try {
+			await unlink(chromiumPath);
+		} catch {
+			// ignore
+		}
+	}
+
+	const executablePath = await chromium.executablePath();
+
+	// Detection still failed — inflate AL2023 libs ourselves
+	if (!existsSync(libnspr)) {
+		const binDir = join(
+			process.cwd(),
+			'node_modules',
+			'@sparticuz',
+			'chromium',
+			'bin'
+		);
+		const al2023Archive = join(binDir, 'al2023.tar.br');
+
+		if (!existsSync(al2023Archive)) {
+			throw new Error(
+				`Missing ${al2023Archive}. Ensure next.config outputFileTracingIncludes covers @sparticuz/chromium/bin.`
+			);
+		}
+
+		await inflate(al2023Archive);
+		setupLambdaEnvironment(libDir);
+	}
+
+	if (!existsSync(libnspr)) {
+		throw new Error(
+			`Chromium AL2023 libs missing after extract (${libnspr}). Check AWS_LAMBDA_JS_RUNTIME / Fluid setup.`
+		);
+	}
+
+	return executablePath;
+}
 
 async function resetBrowser() {
 	if (browser) {
@@ -62,14 +128,10 @@ async function getBrowser(): Promise<Browser> {
 		return browser;
 	}
 
-	// Same shape as old chrome-aws-lambda options, swapped to @sparticuz/chromium
-	chromium.setGraphicsMode = false;
-
 	browser = await puppeteer.launch({
 		args: chromium.args,
 		defaultViewport: VIEWPORT,
-		executablePath: await chromium.executablePath(),
-		// Newer @sparticuz/chromium no longer exports `.headless`
+		executablePath: await resolveChromiumExecutable(),
 		headless: 'shell'
 	});
 
@@ -78,7 +140,6 @@ async function getBrowser(): Promise<Browser> {
 
 async function takeScreenshot(html: string): Promise<Buffer> {
 	const activeBrowser = await getBrowser();
-	// Fresh page per request (old reused one page — unsafe under Fluid)
 	const page: Page = await activeBrowser.newPage();
 
 	try {

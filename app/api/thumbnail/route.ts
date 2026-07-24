@@ -4,7 +4,7 @@ import {
 	getOrCreateThumbnail,
 	setCachedThumbnail
 } from '@/lib/cache';
-import { normalizeLogoUrls } from '@/lib/logos';
+import { prepareLogoUrls } from '@/lib/logos';
 import { parseThumbnailParams, thumbnailCacheKey } from '@/lib/params';
 import { getThumbnailTemplate } from '@/lib/thumb-template';
 
@@ -53,11 +53,7 @@ async function renderThumbnail(parsed: {
 }) {
 	const logoWidth =
 		parsed.logoWidth === 'auto' ? parsed.logoHeight : parsed.logoWidth;
-	const images = await normalizeLogoUrls(
-		parsed.images,
-		logoWidth,
-		parsed.logoHeight
-	);
+	const images = prepareLogoUrls(parsed.images, logoWidth, parsed.logoHeight);
 
 	const html = getThumbnailTemplate({
 		title: parsed.title,

@@ -1,62 +1,38 @@
 /**
- * SVGs that ship with width/height="1em" render tiny as <img>.
- * Only rewrite those dimensions — never crop the viewBox (that clips logos).
+ * Prepare logo URLs for Chromium without a server-side fetch.
+ * (Fetching every logo under concurrent load was a major timeout source.)
+ *
+ * Iconify serves `width="1em"` SVGs by default — pass explicit pixel sizes
+ * via query params so <img> sizing works without rewriting the file.
  */
-export async function normalizeLogoUrl(
+export function prepareLogoUrl(
 	url: string,
 	width: number,
 	height: number
-): Promise<string> {
+): string {
 	try {
-		const response = await fetch(url, {
-			signal: AbortSignal.timeout(5000),
-			cache: 'no-store'
-		});
+		const parsed = new URL(url);
+		const host = parsed.hostname.toLowerCase();
 
-		if (!response.ok) {
-			return url;
+		if (
+			host === 'api.iconify.design' ||
+			host.endsWith('.iconify.design')
+		) {
+			parsed.searchParams.set('width', String(width));
+			parsed.searchParams.set('height', String(height));
+			return parsed.toString();
 		}
-
-		const contentType = response.headers.get('content-type') || '';
-		const body = await response.text();
-		const isSvg =
-			contentType.includes('image/svg') ||
-			body.trimStart().toLowerCase().startsWith('<svg');
-
-		if (!isSvg) {
-			return url;
-		}
-
-		const needsSizeFix = /(?:width|height)\s*=\s*["'][^"']*em["']/i.test(body);
-		if (!needsSizeFix) {
-			// Already has real dimensions — leave the file alone to avoid clipping
-			return url;
-		}
-
-		let svg = body;
-
-		if (/\swidth\s*=/.test(svg)) {
-			svg = svg.replace(/\swidth\s*=\s*["'][^"']*["']/i, ` width="${width}"`);
-		} else {
-			svg = svg.replace(/<svg\b/i, `<svg width="${width}"`);
-		}
-
-		if (/\sheight\s*=/.test(svg)) {
-			svg = svg.replace(/\sheight\s*=\s*["'][^"']*["']/i, ` height="${height}"`);
-		} else {
-			svg = svg.replace(/<svg\b/i, `<svg height="${height}"`);
-		}
-
-		return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 	} catch {
-		return url;
+		// keep original URL
 	}
+
+	return url;
 }
 
-export async function normalizeLogoUrls(
+export function prepareLogoUrls(
 	urls: string[],
 	width: number,
 	height: number
-): Promise<string[]> {
-	return Promise.all(urls.map((url) => normalizeLogoUrl(url, width, height)));
+): string[] {
+	return urls.map((url) => prepareLogoUrl(url, width, height));
 }

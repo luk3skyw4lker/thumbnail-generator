@@ -10,11 +10,15 @@ const chromeExecPaths: Record<string, string> = {
 };
 
 const VIEWPORT = { width: 1200, height: 630 };
-const IMAGE_WAIT_MS = 4000;
 
 let browser: Browser | null = null;
+let page: Page | null = null;
+
+/** One render at a time on the shared page (same model as the original app). */
+let renderLock: Promise<unknown> = Promise.resolve();
 
 async function resetBrowser() {
+	page = null;
 	if (browser) {
 		try {
 			await browser.close();
@@ -39,7 +43,7 @@ async function getBrowser(): Promise<Browser> {
 		}
 
 		browser = await puppeteer.launch({
-			args: ['--no-sandbox', '--disable-setuid-sandbox'],
+			args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
 			executablePath,
 			headless: true
 		});
@@ -55,52 +59,55 @@ async function getBrowser(): Promise<Browser> {
 	return browser;
 }
 
-export async function getScreenshot(html: string): Promise<Buffer> {
+async function getPage(): Promise<Page> {
 	const activeBrowser = await getBrowser();
-	const page: Page = await activeBrowser.newPage();
 
-	try {
-		await page.setViewport(VIEWPORT);
-		await page.setContent(html, { waitUntil: 'domcontentloaded' });
+	if (page && !page.isClosed()) {
+		return page;
+	}
 
-		await page.evaluate(async (waitMs) => {
-			const deadline = Date.now() + waitMs;
+	page = await activeBrowser.newPage();
+	await page.setViewport(VIEWPORT);
+	return page;
+}
 
-			if (document.fonts?.ready) {
-				await Promise.race([
-					document.fonts.ready,
-					new Promise<void>((resolve) => setTimeout(resolve, 1500))
-				]);
-			}
+async function takeScreenshot(html: string): Promise<Buffer> {
+	const activePage = await getPage();
 
-			const images = Array.from(document.images);
-			await Promise.all(
+	// Match the original path: set content, then screenshot.
+	// A short image wait avoids blank logos without multi-second stalls.
+	await activePage.setContent(html, { waitUntil: 'load' });
+	await activePage.evaluate(async () => {
+		const images = Array.from(document.images);
+		await Promise.race([
+			Promise.all(
 				images.map((img) => {
 					if (img.complete) return Promise.resolve();
 					return new Promise<void>((resolve) => {
-						const remaining = Math.max(250, deadline - Date.now());
-						const timer = setTimeout(() => resolve(), remaining);
-						const done = () => {
-							clearTimeout(timer);
-							resolve();
-						};
-						img.addEventListener('load', done, { once: true });
-						img.addEventListener('error', done, { once: true });
+						img.addEventListener('load', () => resolve(), { once: true });
+						img.addEventListener('error', () => resolve(), { once: true });
 					});
 				})
-			);
-		}, IMAGE_WAIT_MS);
+			),
+			new Promise<void>((resolve) => setTimeout(resolve, 1500))
+		]);
+	});
 
-		const file = await page.screenshot({ type: 'png' });
-		return Buffer.from(file);
-	} catch (error) {
-		await resetBrowser();
-		throw error;
-	} finally {
-		try {
-			if (!page.isClosed()) await page.close();
-		} catch {
-			// ignore
-		}
-	}
+	const file = await activePage.screenshot({ type: 'png' });
+	return Buffer.from(file);
+}
+
+export function getScreenshot(html: string): Promise<Buffer> {
+	const run = () =>
+		takeScreenshot(html).catch(async (error) => {
+			await resetBrowser();
+			throw error;
+		});
+
+	const result = renderLock.then(run, run);
+	renderLock = result.then(
+		() => undefined,
+		() => undefined
+	);
+	return result;
 }

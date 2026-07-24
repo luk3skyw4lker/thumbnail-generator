@@ -5,34 +5,8 @@ const nextConfig: NextConfig = {
 	outputFileTracingIncludes: {
 		'/api/thumbnail': ['./node_modules/@sparticuz/chromium/bin/**']
 	},
-	async headers() {
-		return [
-			{
-				source: '/api/thumbnail',
-				headers: [
-					{
-						key: 'Cache-Control',
-						value:
-							process.env.NODE_ENV === 'development'
-								? 'no-store, no-cache, must-revalidate, max-age=0'
-								: 'public, immutable, no-transform, s-maxage=31536000, max-age=31536000'
-					}
-				]
-			},
-			{
-				source: '/api/thumbnail.png',
-				headers: [
-					{
-						key: 'Cache-Control',
-						value:
-							process.env.NODE_ENV === 'development'
-								? 'no-store, no-cache, must-revalidate, max-age=0'
-								: 'public, immutable, no-transform, s-maxage=31536000, max-age=31536000'
-					}
-				]
-			}
-		];
-	},
+	// Do NOT set Cache-Control here — it overrides the route's nocache/bypass headers
+	// and was causing stale immutable PNGs while fresh requests 500'd.
 	async rewrites() {
 		return [
 			{

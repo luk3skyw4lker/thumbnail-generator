@@ -25,24 +25,28 @@ function shouldBypassCache(request: Request, nocache: boolean) {
 }
 
 function cacheHeaders(bypass: boolean): Record<string, string> {
+	const generatedAt = new Date().toISOString();
+
 	if (bypass) {
 		return {
 			'Content-Type': 'image/png',
 			'Cache-Control':
-				'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+				'private, no-store, no-cache, must-revalidate, max-age=0',
 			Pragma: 'no-cache',
 			Expires: '0',
 			'CDN-Cache-Control': 'no-store',
 			'Vercel-CDN-Cache-Control': 'no-store',
-			'X-Cache-Version': CACHE_VERSION
+			'X-Cache-Version': CACHE_VERSION,
+			'X-Generated-At': generatedAt
 		};
 	}
 
 	return {
 		'Content-Type': 'image/png',
 		'Cache-Control':
-			'public, immutable, no-transform, s-maxage=31536000, max-age=31536000, stale-while-revalidate=86400',
-		'X-Cache-Version': CACHE_VERSION
+			'public, s-maxage=31536000, max-age=31536000, stale-while-revalidate=86400',
+		'X-Cache-Version': CACHE_VERSION,
+		'X-Generated-At': generatedAt
 	};
 }
 
@@ -106,7 +110,14 @@ export async function GET(request: Request) {
 			}
 		});
 	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Internal error';
 		console.error(error);
-		return new Response('Internal error', { status: 500 });
+		return new Response(message, {
+			status: 500,
+			headers: {
+				'Cache-Control': 'no-store',
+				'X-Cache': 'ERROR'
+			}
+		});
 	}
 }

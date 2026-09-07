@@ -1,13 +1,14 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState, type MouseEvent } from 'react';
 import styles from './page.module.css';
 
 const EXAMPLE_PATH =
-	'/api/thumbnail.png?title=Hoisting%20in%20**Javascript**&bg=%23121214&images=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fcommons%2F6%2F6a%2FJavaScript-logo.png';
+	'/api/thumbnail.png?title=Hoisting%20in%20**Javascript**&bg=%23121214&icons=logos:javascript';
 
 const IMG_SNIPPET = `<img
-  src="https://your-domain.com/api/thumbnail.png?title=Hello%20World&images=https://example.com/logo.svg&logoHeight=180"
+  src="https://your-domain.com/api/thumbnail.png?title=Hello%20World&icons=logos:react,logos:nodejs-icon&logoHeight=180"
   alt="Hello World"
   width="2048"
   height="1170"
@@ -96,6 +97,9 @@ export default function HomePage() {
 					>
 						Read the API
 					</a>
+					<Link className={styles.ctaSecondary} href="/icons">
+						Browse icons
+					</Link>
 				</div>
 			</section>
 
@@ -163,6 +167,41 @@ export default function HomePage() {
 						</tr>
 						<tr>
 							<td data-label="Param">
+								<code>icons</code>
+							</td>
+							<td data-label="Required">no</td>
+							<td data-label="Default">
+								<code>[]</code>
+							</td>
+							<td data-label="Description">
+								Iconify icon name(s) such as <code>logos:react</code>, resolved
+								from icon sets bundled in this deploy — no external CDN. Repeat
+								the param or comma-separate. Collections:{' '}
+								<code>logos</code>, <code>simple-icons</code>,{' '}
+								<code>devicon</code>, <code>skill-icons</code>,{' '}
+								<code>lucide</code>, <code>mdi</code>, <code>tabler</code>. A
+								name with no prefix
+								falls back to <code>logos</code>. Browse them all at{' '}
+								<Link href="/icons">/icons</Link>.
+							</td>
+						</tr>
+						<tr>
+							<td data-label="Param">
+								<code>iconColor</code>
+							</td>
+							<td data-label="Required">no</td>
+							<td data-label="Default">
+								<code>#ffffff</code>
+							</td>
+							<td data-label="Description">
+								Color for monochrome sets (<code>simple-icons</code>,{' '}
+								<code>lucide</code>, <code>mdi</code>, <code>tabler</code>).
+								Multi-color sets such
+								as <code>logos</code> ignore it.
+							</td>
+						</tr>
+						<tr>
+							<td data-label="Param">
 								<code>fontSize</code>
 							</td>
 							<td data-label="Required">no</td>
@@ -179,7 +218,9 @@ export default function HomePage() {
 							<td data-label="Default">
 								<code>225</code>
 							</td>
-							<td data-label="Description">Logo height in px (16–800).</td>
+							<td data-label="Description">
+								Logo / icon height in px (16–800).
+							</td>
 						</tr>
 						<tr>
 							<td data-label="Param">

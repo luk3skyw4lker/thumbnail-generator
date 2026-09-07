@@ -1,7 +1,13 @@
+import { parseColor } from './color';
+
 export interface ThumbnailParams {
 	title: string;
 	bg: string;
 	images: string[];
+	/** Iconify icon names (`logos:react`), resolved from bundled icon sets. */
+	icons: string[];
+	/** Color for monochrome icon sets that draw with `currentColor`. */
+	iconColor: string;
 	fontSize: number;
 	logoHeight: number;
 	logoWidth: number | 'auto';
@@ -19,6 +25,7 @@ const SIZE_MAX = 800;
 const DEFAULT_LOGO_HEIGHT = 225;
 const DEFAULT_FONT_SIZE = 100;
 const DEFAULT_BG = '#000000';
+const DEFAULT_ICON_COLOR = '#ffffff';
 
 function clamp(value: number, min: number, max: number) {
 	return Math.min(max, Math.max(min, value));
@@ -90,13 +97,18 @@ export function parseThumbnailParams(
 	}
 
 	const imageParams = searchParams.getAll('images');
+	const iconParams = searchParams.getAll('icons');
 
 	return {
 		title,
-		bg: searchParams.get('bg') || DEFAULT_BG,
+		bg: parseColor(searchParams.get('bg'), DEFAULT_BG),
 		images: getArray(
 			imageParams.length > 0 ? imageParams : searchParams.get('images')
 		),
+		icons: getArray(
+			iconParams.length > 0 ? iconParams : searchParams.get('icons')
+		),
+		iconColor: parseColor(searchParams.get('iconColor'), DEFAULT_ICON_COLOR),
 		fontSize: clamp(
 			parsePositiveInt(searchParams.get('fontSize'), DEFAULT_FONT_SIZE),
 			SIZE_MIN,
@@ -124,6 +136,8 @@ export function thumbnailCacheKey(
 		bg: params.bg.toLowerCase(),
 		// Preserve order — logo sequence is part of the image
 		images: params.images,
+		icons: params.icons,
+		iconColor: params.iconColor.toLowerCase(),
 		fontSize: params.fontSize,
 		logoHeight: params.logoHeight,
 		logoWidth: params.logoWidth,

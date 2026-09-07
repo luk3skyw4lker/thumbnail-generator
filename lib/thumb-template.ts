@@ -4,6 +4,8 @@ import { marked } from 'marked';
 export interface ThumbnailTemplateArgs {
 	thumbnail_bg: string;
 	images: string[];
+	/** Pre-rendered `<svg>` markup from lib/icons — inlined, never fetched. */
+	iconMarkup?: string[];
 	fontSize: number;
 	title: string;
 	logoHeight: number;
@@ -45,11 +47,18 @@ export function getThumbnailTemplate({
 	title,
 	thumbnail_bg,
 	images,
+	iconMarkup = [],
 	fontSize,
 	logoHeight,
 	logoWidth
 }: ThumbnailTemplateArgs) {
 	const renderedTitle = marked.parse(title, { async: false }) as string;
+
+	// Remote images keep their original position; bundled icons follow them.
+	const logos = [
+		...images.map((image) => getImage(image, logoHeight, logoWidth)),
+		...iconMarkup
+	];
 
 	return `<!DOCTYPE html>
   <html lang="en">
@@ -70,7 +79,9 @@ export function getThumbnailTemplate({
         justify-content: center;
       }
 
-      svg {
+      /* Legacy decorative rule — must not touch inlined icon SVGs, which
+         carry their own width/height from logoHeight/logoWidth. */
+      svg:not(.logo) {
         height: 40px;
         margin-top: 80px;
       }
@@ -126,16 +137,7 @@ export function getThumbnailTemplate({
     <div>
       <div class="spacer">
       <div class="logo-wrapper">
-         ${
-						images.length === 0
-							? ''
-							: images
-									.map(
-										(img, i) =>
-											getPlusSign(i) + getImage(img, logoHeight, logoWidth)
-									)
-									.join('')
-					}
+         ${logos.map((logo, i) => getPlusSign(i) + logo).join('')}
       </div>
       <div class="spacer">
       <div class="heading">
